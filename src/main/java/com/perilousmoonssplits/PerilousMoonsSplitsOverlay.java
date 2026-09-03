@@ -1,0 +1,132 @@
+package com.perilousmoonssplits;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import javax.inject.Inject;
+import net.runelite.api.Client;
+import net.runelite.api.MenuAction;
+import net.runelite.client.ui.overlay.OverlayPanel;
+import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.components.LineComponent;
+import net.runelite.client.ui.overlay.components.TitleComponent;
+
+class PerilousMoonsSplitsOverlay extends OverlayPanel
+{
+	private final Client client;
+	private final PerilousMoonsSplitsConfig config;
+	private final RunTracker runTracker;
+	private final PersonalBestStore personalBestStore;
+	private final DungeonOverlayVisibility dungeonOverlayVisibility;
+	private final RoutePbToggle routePbToggle;
+
+	@Inject
+	private PerilousMoonsSplitsOverlay(
+		Client client,
+		PerilousMoonsSplitsConfig config,
+		RunTracker runTracker,
+		PersonalBestStore personalBestStore,
+		DungeonOverlayVisibility dungeonOverlayVisibility,
+		RoutePbToggle routePbToggle)
+	{
+		this.client = client;
+		this.config = config;
+		this.runTracker = runTracker;
+		this.personalBestStore = personalBestStore;
+		this.dungeonOverlayVisibility = dungeonOverlayVisibility;
+		this.routePbToggle = routePbToggle;
+		setPosition(OverlayPosition.TOP_LEFT);
+		addMenuEntry(MenuAction.RUNELITE_OVERLAY, "Toggle", "Route PBs", e -> routePbToggle.toggle());
+	}
+
+	@Override
+	public Dimension render(Graphics2D graphics)
+	{
+		if (!config.showOverlay() || !dungeonOverlayVisibility.shouldShowOverlay(client))
+		{
+			return null;
+		}
+
+		panelComponent.getChildren().clear();
+		panelComponent.setPreferredSize(new Dimension(config.overlayWidth(), 0));
+
+		String orderSummary = runTracker.getOrderSummary();
+		String title = orderSummary.isEmpty()
+			? "Perilous Moons Splits"
+			: "Perilous Moons Splits [" + orderSummary + "]";
+
+		panelComponent.getChildren().add(TitleComponent.builder()
+			.text(title)
+			.color(Color.ORANGE)
+			.build());
+
+		long nowMs = System.currentTimeMillis();
+		int activeSplitIndex = runTracker.getActiveSplitIndex();
+		boolean hasStartedSplit = false;
+
+		for (int i = 0; i < runTracker.getSplits().length; i++)
+		{
+			SplitData split = runTracker.getSplits()[i];
+			boolean isActive = i == activeSplitIndex;
+			hasStartedSplit = hasStartedSplit || split.isActive() || split.isComplete();
+
+			String timeText;
+			if (split.isComplete())
+			{
+				timeText = SplitFormatter.formatDuration(split.getElapsedMs(split.getEndTimeMs()));
+			}
+			else if (split.isActive())
+			{
+				timeText = SplitFormatter.formatDuration(split.getElapsedMs(nowMs));
+			}
+			else
+			{
+				timeText = "--:--";
+			}
+
+			Long personalBest = runTracker.getPersonalBestForSplit(i, personalBestStore);
+			String pbText = personalBest == null ? "--:--" : SplitFormatter.formatDuration(personalBest);
+
+			Color lineColor = isActive ? Color.GREEN : Color.WHITE;
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left(runTracker.getSplitLabel(i))
+				.right(timeText + "  PB " + pbText)
+				.leftColor(lineColor)
+				.rightColor(lineColor)
+				.build());
+
+			if (config.showSupplies() && RunTracker.isBossSplit(i) && (split.isActive() || split.isComplete()))
+			{
+				panelComponent.getChildren().add(LineComponent.builder()
+					.left("  Food / Potions")
+					.right(split.getFoodUsed() + " / " + split.getPotionsUsed())
+					.leftColor(Color.LIGHT_GRAY)
+					.rightColor(Color.LIGHT_GRAY)
+					.build());
+			}
+		}
+
+		if (hasStartedSplit)
+		{
+			long totalMs = runTracker.getTotalElapsedMs(nowMs);
+			Long totalPb = runTracker.getTotalPersonalBest(personalBestStore);
+			String totalPbText = totalPb == null ? "--:--" : SplitFormatter.formatDuration(totalPb);
+
+			panelComponent.getChildren().add(LineComponent.builder()
+				.left("Total")
+				.right(SplitFormatter.formatDuration(totalMs) + "  PB " + totalPbText)
+				.leftColor(Color.YELLOW)
+				.rightColor(Color.YELLOW)
+				.build());
+		}
+
+		panelComponent.getChildren().add(LineComponent.builder()
+			.left("Route PBs")
+			.right(config.showRoutePersonalBests() ? "Shown" : "Hidden")
+			.leftColor(Color.CYAN)
+			.rightColor(Color.CYAN)
+			.build());
+
+		return super.render(graphics);
+	}
+}
