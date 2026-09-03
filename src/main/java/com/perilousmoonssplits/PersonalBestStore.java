@@ -1,8 +1,8 @@
 package com.perilousmoonssplits;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import java.lang.reflect.Type;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +11,7 @@ import javax.inject.Singleton;
 import net.runelite.client.config.ConfigManager;
 
 @Singleton
-public class PersonalBestStore
+class PersonalBestStore
 {
 	private static final String CONFIG_GROUP = "perilous-moons-splits";
 	private static final String PB_CONFIG_KEY = "personalBestsJson";
@@ -37,11 +37,18 @@ public class PersonalBestStore
 			return;
 		}
 
-		Type type = new TypeToken<Map<String, Long>>() {}.getType();
-		Map<String, Long> loaded = gson.fromJson(json, type);
-		if (loaded != null)
+		JsonObject loaded = gson.fromJson(json, JsonObject.class);
+		if (loaded == null)
 		{
-			personalBests.putAll(loaded);
+			return;
+		}
+
+		for (Map.Entry<String, JsonElement> entry : loaded.entrySet())
+		{
+			if (entry.getValue().isJsonPrimitive())
+			{
+				personalBests.put(entry.getKey(), entry.getValue().getAsLong());
+			}
 		}
 	}
 
@@ -61,6 +68,12 @@ public class PersonalBestStore
 		personalBests.put(key, durationMs);
 		save();
 		return true;
+	}
+
+	void clearAll()
+	{
+		personalBests.clear();
+		save();
 	}
 
 	private void save()
@@ -101,12 +114,6 @@ public class PersonalBestStore
 	static String totalKey(List<MoonsBoss> order)
 	{
 		return "total." + formatOrder(order);
-	}
-
-	void clearAll()
-	{
-		personalBests.clear();
-		save();
 	}
 
 	private static String formatOrder(List<MoonsBoss> order)

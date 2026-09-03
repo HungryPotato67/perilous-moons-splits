@@ -1,13 +1,10 @@
 package com.perilousmoonssplits;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
-public class SplitData
+class SplitData
 {
 	private final int index;
 	private long startTimeMs = -1;
@@ -50,7 +47,6 @@ public class SplitData
 		{
 			return -1;
 		}
-
 		long end = endTimeMs >= 0 ? endTimeMs : nowMs;
 		return end - startTimeMs;
 	}
@@ -71,5 +67,20 @@ public class SplitData
 		endTimeMs = -1;
 		foodUsed = 0;
 		potionsUsed = 0;
+	}
+
+	static String formatDuration(long millis)
+	{
+		if (millis < 0)
+		{
+			return "--:--";
+		}
+
+		long totalCentiseconds = millis / 10;
+		long centiseconds = totalCentiseconds % 100;
+		long totalSeconds = totalCentiseconds / 100;
+		long seconds = totalSeconds % 60;
+		long minutes = totalSeconds / 60;
+		return String.format("%d:%02d.%d", minutes, seconds, centiseconds / 10);
 	}
 }

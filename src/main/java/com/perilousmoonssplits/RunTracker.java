@@ -42,6 +42,7 @@ public class RunTracker
 	private int lootRegionId = -1;
 	private WorldPoint lootLocation;
 	private int visibleBossCount;
+	private boolean overlaySuppressedUntilReenter;
 
 	public boolean isRunActive()
 	{
@@ -138,6 +139,11 @@ public class RunTracker
 		wasBossInCombat = false;
 		visibleBossCount = 0;
 
+		if (fromLoginOrHop)
+		{
+			overlaySuppressedUntilReenter = false;
+		}
+
 		// Only clear completed-run display on a real login/hop. Moons teleports after a
 		// boss kill can also emit LOGGED_IN via LOADING, and must keep the finished times.
 		if (fromLoginOrHop && runComplete && !awaitingNextRun)
@@ -149,6 +155,45 @@ public class RunTracker
 			{
 				split.reset();
 			}
+		}
+	}
+
+	boolean shouldShowOverlay(Client client)
+	{
+		if (overlaySuppressedUntilReenter)
+		{
+			return false;
+		}
+		if (client == null || client.getLocalPlayer() == null)
+		{
+			return false;
+		}
+		return NeypotzliRegions.isInNeypotzli(client) || isBossPresent() || isBossInCombat(client);
+	}
+
+	boolean shouldShowOverlayForRegion(int regionId)
+	{
+		return NeypotzliRegions.isNeypotzliRegion(regionId) && !overlaySuppressedUntilReenter;
+	}
+
+	void onPlayerDied()
+	{
+		overlaySuppressedUntilReenter = true;
+	}
+
+	void onOverlayRegionChanged(Client client)
+	{
+		if (!NeypotzliRegions.isInNeypotzli(client) && !isBossPresent() && !isBossInCombat(client))
+		{
+			overlaySuppressedUntilReenter = false;
+		}
+	}
+
+	void onLeftDungeonRegion(int regionId)
+	{
+		if (!NeypotzliRegions.isNeypotzliRegion(regionId))
+		{
+			overlaySuppressedUntilReenter = false;
 		}
 	}
 
@@ -475,11 +520,6 @@ public class RunTracker
 		return null;
 	}
 
-	static boolean areAllBossesAlive(Client client)
-	{
-		return getDeadBossCount(client) == 0;
-	}
-
 	static int getDeadBossCount(Client client)
 	{
 		int dead = 0;
@@ -546,21 +586,15 @@ public class RunTracker
 
 	void startNextRunAfterChestLoot(long nowMs)
 	{
-		if (!awaitingNextRun)
+		if (awaitingNextRun)
 		{
-			return;
+			startNextRun(null, nowMs);
 		}
-
-		startNextRun(null, nowMs);
 	}
 
 	private void startNextRun(Client client, long nowMs)
 	{
-		awaitingNextRun = false;
-		lootRegionId = -1;
-		lootLocation = null;
 		beginRun(nowMs);
-
 		if (client != null && isBossInCombat(client))
 		{
 			wasBossInCombat = true;
@@ -580,24 +614,17 @@ public class RunTracker
 
 	private void tryStartRun(Client client, boolean canStartHere)
 	{
-		if (awaitingNextRun || runActive || runComplete || !canStartHere || !areAllBossesAlive(client))
+		if (awaitingNextRun || runActive || runComplete || !canStartHere || getDeadBossCount(client) != 0)
 		{
 			return;
 		}
 
-		runActive = true;
-		runComplete = false;
-		wasBossInCombat = isBossInCombat(client);
-		killOrder.clear();
-		for (SplitData split : splits)
+		long nowMs = System.currentTimeMillis();
+		beginRun(nowMs);
+		if (isBossInCombat(client))
 		{
-			split.reset();
-		}
-		startSplit(0, System.currentTimeMillis());
-
-		if (wasBossInCombat)
-		{
-			onBossCombatStarted(System.currentTimeMillis());
+			wasBossInCombat = true;
+			onBossCombatStarted(nowMs);
 		}
 	}
 
@@ -691,18 +718,7 @@ public class RunTracker
 		{
 			return new ArrayList<>(assumedOrder);
 		}
-
-		if (killOrder.size() == 3)
-		{
-			return new ArrayList<>(killOrder);
-		}
-
-		if (!killOrder.isEmpty())
-		{
-			return new ArrayList<>(killOrder);
-		}
-
-		return new ArrayList<>();
+		return new ArrayList<>(killOrder);
 	}
 
 	private static String formatOrderSummary(List<MoonsBoss> order)

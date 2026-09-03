@@ -16,49 +16,45 @@ class PerilousMoonsPermutationOverlay extends OverlayPanel
 	private final Client client;
 	private final PerilousMoonsSplitsConfig config;
 	private final PersonalBestStore personalBestStore;
-	private final DungeonOverlayVisibility dungeonOverlayVisibility;
+	private final RunTracker runTracker;
 
 	@Inject
 	private PerilousMoonsPermutationOverlay(
 		Client client,
 		PerilousMoonsSplitsConfig config,
 		PersonalBestStore personalBestStore,
-		DungeonOverlayVisibility dungeonOverlayVisibility)
+		RunTracker runTracker)
 	{
 		this.client = client;
 		this.config = config;
 		this.personalBestStore = personalBestStore;
-		this.dungeonOverlayVisibility = dungeonOverlayVisibility;
+		this.runTracker = runTracker;
 		setPosition(OverlayPosition.TOP_RIGHT);
 	}
 
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (!config.showRoutePersonalBests() || !dungeonOverlayVisibility.shouldShowOverlay(client))
+		if (!config.showRoutePersonalBests() || !runTracker.shouldShowOverlay(client))
 		{
 			return null;
 		}
 
 		panelComponent.getChildren().clear();
 		panelComponent.setPreferredSize(new Dimension(config.permutationOverlayWidth(), 0));
-
 		panelComponent.getChildren().add(TitleComponent.builder()
 			.text("Route Total PBs")
 			.color(Color.ORANGE)
 			.build());
 
-		for (List<MoonsBoss> route : RoutePermutations.all())
+		for (List<MoonsBoss> route : MoonsBoss.allRoutes())
 		{
 			Long personalBest = personalBestStore.getPersonalBest(PersonalBestStore.totalKey(route));
-			String pbText = personalBest == null ? "--:--" : SplitFormatter.formatDuration(personalBest);
-			Color rightColor = personalBest == null ? Color.GRAY : Color.WHITE;
-
 			panelComponent.getChildren().add(LineComponent.builder()
-				.left(RoutePermutations.formatRoute(route))
-				.right(pbText)
+				.left(MoonsBoss.formatRoute(route))
+				.right(personalBest == null ? "--:--" : SplitData.formatDuration(personalBest))
 				.leftColor(Color.LIGHT_GRAY)
-				.rightColor(rightColor)
+				.rightColor(personalBest == null ? Color.GRAY : Color.WHITE)
 				.build());
 		}
 

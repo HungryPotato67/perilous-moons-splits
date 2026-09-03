@@ -2,12 +2,14 @@ package com.perilousmoonssplits;
 
 import com.google.inject.Provides;
 import java.awt.Color;
+import java.awt.event.KeyEvent;
 import java.util.List;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Actor;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.NPC;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.GameStateChanged;
@@ -17,12 +19,12 @@ import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
-import net.runelite.api.GameState;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -30,46 +32,20 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.ColorUtil;
 
 @Slf4j
-@PluginDescriptor(
-	name = "Perilous Moons Splits"
-)
-public class PerilousMoonsSplitsPlugin extends Plugin
+@PluginDescriptor(name = "Perilous Moons Splits")
+public class PerilousMoonsSplitsPlugin extends Plugin implements KeyListener
 {
-	@Inject
-	private Client client;
+	private static final String CONFIG_GROUP = "perilous-moons-splits";
 
-	@Inject
-	private PerilousMoonsSplitsConfig config;
-
-	@Inject
-	private OverlayManager overlayManager;
-
-	@Inject
-	private PerilousMoonsSplitsOverlay overlay;
-
-	@Inject
-	private PerilousMoonsPermutationOverlay permutationOverlay;
-
-	@Inject
-	private DungeonOverlayVisibility dungeonOverlayVisibility;
-
-	@Inject
-	private RunTracker runTracker;
-
-	@Inject
-	private PersonalBestStore personalBestStore;
-
-	@Inject
-	private KeyManager keyManager;
-
-	@Inject
-	private ResetRunHotkeyListener resetRunHotkeyListener;
-
-	@Inject
-	private ToggleRoutePbHotkeyListener toggleRoutePbHotkeyListener;
-
-	@Inject
-	private ConfigManager configManager;
+	@Inject private Client client;
+	@Inject private PerilousMoonsSplitsConfig config;
+	@Inject private OverlayManager overlayManager;
+	@Inject private PerilousMoonsSplitsOverlay overlay;
+	@Inject private PerilousMoonsPermutationOverlay permutationOverlay;
+	@Inject private RunTracker runTracker;
+	@Inject private PersonalBestStore personalBestStore;
+	@Inject private KeyManager keyManager;
+	@Inject private ConfigManager configManager;
 
 	private int previousDeadBossCount = -1;
 	private int previousRegionId = -1;
@@ -82,8 +58,7 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 	{
 		overlayManager.add(overlay);
 		overlayManager.add(permutationOverlay);
-		keyManager.registerKeyListener(resetRunHotkeyListener);
-		keyManager.registerKeyListener(toggleRoutePbHotkeyListener);
+		keyManager.registerKeyListener(this);
 		personalBestStore.load();
 	}
 
@@ -92,9 +67,39 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 	{
 		overlayManager.remove(overlay);
 		overlayManager.remove(permutationOverlay);
-		keyManager.unregisterKeyListener(resetRunHotkeyListener);
-		keyManager.unregisterKeyListener(toggleRoutePbHotkeyListener);
+		keyManager.unregisterKeyListener(this);
 		runTracker.manualReset();
+	}
+
+	@Override
+	public void keyTyped(KeyEvent event)
+	{
+	}
+
+	@Override
+	public void keyPressed(KeyEvent event)
+	{
+		if (config.resetKeybind().matches(event))
+		{
+			runTracker.manualReset();
+			chat("Perilous Moons Splits run reset.", Color.ORANGE);
+		}
+		else if (config.routePbKeybind().matches(event))
+		{
+			toggleRoutePersonalBests();
+		}
+	}
+
+	@Override
+	public void keyReleased(KeyEvent event)
+	{
+	}
+
+	void toggleRoutePersonalBests()
+	{
+		boolean enabled = !config.showRoutePersonalBests();
+		configManager.setConfiguration(CONFIG_GROUP, "showRoutePersonalBests", enabled);
+		chat("Perilous Moons route PB overlay " + (enabled ? "shown" : "hidden") + ".", Color.ORANGE);
 	}
 
 	@Subscribe
@@ -132,13 +137,9 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 			previousInRunStartArea = false;
 			previousInPrepRoom = false;
 			runTracker.onLoggedIn(fromLoginOrHop);
-			dungeonOverlayVisibility.onLoggedIn(fromLoginOrHop);
 			if (config.debugMode())
 			{
-				log.debug(
-					"Logged in (fromLoginOrHop={}) - region tracking reset",
-					fromLoginOrHop
-				);
+				log.debug("Logged in (fromLoginOrHop={}) - region tracking reset", fromLoginOrHop);
 			}
 		}
 		previousGameState = gameState;
@@ -152,7 +153,7 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 			logRegionState();
 		}
 
-		dungeonOverlayVisibility.onRegionChanged(client);
+		runTracker.onOverlayRegionChanged(client);
 		runTracker.onRegionChanged(client);
 		handleCompletedPrepSplit(runTracker.syncBossCombatState(client, System.currentTimeMillis()), "tick");
 
@@ -180,56 +181,40 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 		Actor actor = event.getActor();
 		if (actor == client.getLocalPlayer())
 		{
-			dungeonOverlayVisibility.onPlayerDied();
+			runTracker.onPlayerDied();
 			return;
 		}
-
 		if (!(actor instanceof NPC))
 		{
 			return;
 		}
 
-		NPC npc = (NPC) actor;
-		MoonsBoss boss = MoonsBoss.fromNpcId(npc.getId());
-		if (boss == null)
+		MoonsBoss boss = MoonsBoss.fromNpcId(((NPC) actor).getId());
+		if (boss != null)
 		{
-			return;
+			handleBossKill(boss, "npc-death");
 		}
-
-		handleBossKill(boss, "npc-death");
 	}
 
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged event)
 	{
 		int varbitId = event.getVarbitId();
-
 		if (varbitId == VarbitID.PMOON_BOSS_IN_COMBAT)
 		{
 			if (config.debugMode())
 			{
 				log.debug("PMOON_BOSS_IN_COMBAT={}", event.getValue());
 			}
-
-			handleCompletedPrepSplit(
-				runTracker.syncBossCombatState(client, System.currentTimeMillis()),
-				"varbit"
-			);
+			handleCompletedPrepSplit(runTracker.syncBossCombatState(client, System.currentTimeMillis()), "varbit");
 			return;
 		}
 
 		MoonsBoss boss = MoonsBoss.fromDeathVarbit(varbitId);
-		if (boss == null)
+		if (boss != null && event.getValue() == 1)
 		{
-			return;
+			handleBossKill(boss, "varbit");
 		}
-
-		if (event.getValue() != 1)
-		{
-			return;
-		}
-
-		handleBossKill(boss, "varbit");
 	}
 
 	@Subscribe
@@ -258,24 +243,18 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (!"perilous-moons-splits".equals(event.getGroup()) || !"resetPersonalBests".equals(event.getKey()))
+		if (!CONFIG_GROUP.equals(event.getGroup()) || !"resetPersonalBests".equals(event.getKey()))
 		{
 			return;
 		}
-
 		if (!config.resetPersonalBests())
 		{
 			return;
 		}
 
 		personalBestStore.clearAll();
-		configManager.setConfiguration("perilous-moons-splits", "resetPersonalBests", "false");
-		client.addChatMessage(
-			ChatMessageType.GAMEMESSAGE,
-			"",
-			ColorUtil.wrapWithColorTag("Perilous Moons personal bests reset.", Color.ORANGE),
-			null
-		);
+		configManager.setConfiguration(CONFIG_GROUP, "resetPersonalBests", "false");
+		chat("Perilous Moons personal bests reset.", Color.ORANGE);
 	}
 
 	@Provides
@@ -300,7 +279,6 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 		}
 
 		handlePersonalBest(completedSplitIndex, durationMs);
-
 		if (runTracker.isRunComplete())
 		{
 			handleTotalPersonalBest();
@@ -322,13 +300,8 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 
 		if (config.debugMode())
 		{
-			log.debug(
-				"Boss combat started via {} after {}",
-				source,
-				runTracker.getSplitLabel(completedPrepIndex)
-			);
+			log.debug("Boss combat started via {} after {}", source, runTracker.getSplitLabel(completedPrepIndex));
 		}
-
 		handlePersonalBest(completedPrepIndex, prepSplit.getElapsedMs(prepSplit.getEndTimeMs()));
 	}
 
@@ -340,47 +313,33 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 			return;
 		}
 
-		boolean isPb = personalBestStore.updatePersonalBest(pbKey, durationMs);
-		if (isPb && config.notifyPersonalBest())
+		if (personalBestStore.updatePersonalBest(pbKey, durationMs) && config.notifyPersonalBest())
 		{
-			String message = String.format(
+			chat(String.format(
 				"Perilous Moons %s PB: %s",
 				runTracker.getSplitLabel(completedSplitIndex),
-				SplitFormatter.formatDuration(durationMs)
-			);
-			client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				ColorUtil.wrapWithColorTag(message, Color.GREEN),
-				null
-			);
+				SplitData.formatDuration(durationMs)), Color.GREEN);
 		}
 	}
 
 	private void handleTotalPersonalBest()
 	{
-		long totalMs = runTracker.getTotalElapsedMs(System.currentTimeMillis());
 		List<MoonsBoss> route = runTracker.getRouteOrder();
 		if (route.size() < 3)
 		{
 			return;
 		}
 
-		String pbKey = PersonalBestStore.totalKey(route);
-		boolean isPb = personalBestStore.updatePersonalBest(pbKey, totalMs);
-		if (isPb && config.notifyPersonalBest())
+		long totalMs = runTracker.getTotalElapsedMs(System.currentTimeMillis());
+		if (personalBestStore.updatePersonalBest(PersonalBestStore.totalKey(route), totalMs) && config.notifyPersonalBest())
 		{
-			String message = String.format(
-				"Perilous Moons Total PB: %s",
-				SplitFormatter.formatDuration(totalMs)
-			);
-			client.addChatMessage(
-				ChatMessageType.GAMEMESSAGE,
-				"",
-				ColorUtil.wrapWithColorTag(message, Color.GREEN),
-				null
-			);
+			chat("Perilous Moons Total PB: " + SplitData.formatDuration(totalMs), Color.GREEN);
 		}
+	}
+
+	private void chat(String message, Color color)
+	{
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", ColorUtil.wrapWithColorTag(message, color), null);
 	}
 
 	private void logRegionState()
@@ -394,30 +353,32 @@ public class PerilousMoonsSplitsPlugin extends Plugin
 		int regionId = NeypotzliRegions.getPlayerRegion(client);
 		boolean inRunStartArea = NeypotzliRegions.isEffectiveRunStartArea(client, runTracker.isBossPresent());
 		boolean inPrepRoom = NeypotzliRegions.isInPrepRoom(client, runTracker.isBossPresent());
-		if (regionId != previousRegionId
-			|| rawRegionId != previousRegionId
-			|| inRunStartArea != previousInRunStartArea
-			|| inPrepRoom != previousInPrepRoom)
+		if (regionId == previousRegionId
+			&& rawRegionId == previousRegionId
+			&& inRunStartArea == previousInRunStartArea
+			&& inPrepRoom == previousInPrepRoom)
 		{
-			log.debug(
-				"Region raw={} translated={} (neypotzli={}, antechamber={}, bossChamber={}, prepRoom={}, bossPresent={}, startArea={}, canStart={}, overlay={}, runActive={}, runComplete={}, awaitingNext={})",
-				rawRegionId,
-				regionId,
-				NeypotzliRegions.isInNeypotzli(client),
-				NeypotzliRegions.isInAntechamber(client),
-				NeypotzliRegions.isInBossChamber(client),
-				inPrepRoom,
-				runTracker.isBossPresent(),
-				inRunStartArea,
-				RunTracker.canStartRunHere(inRunStartArea, inPrepRoom),
-				dungeonOverlayVisibility.shouldShowOverlay(client),
-				runTracker.isRunActive(),
-				runTracker.isRunComplete(),
-				runTracker.isAwaitingNextRun()
-			);
-			previousRegionId = rawRegionId != -1 ? rawRegionId : regionId;
-			previousInRunStartArea = inRunStartArea;
-			previousInPrepRoom = inPrepRoom;
+			return;
 		}
+
+		log.debug(
+			"Region raw={} translated={} (neypotzli={}, antechamber={}, bossChamber={}, prepRoom={}, bossPresent={}, startArea={}, canStart={}, overlay={}, runActive={}, runComplete={}, awaitingNext={})",
+			rawRegionId,
+			regionId,
+			NeypotzliRegions.isInNeypotzli(client),
+			NeypotzliRegions.isInAntechamber(client),
+			NeypotzliRegions.isInBossChamber(client),
+			inPrepRoom,
+			runTracker.isBossPresent(),
+			inRunStartArea,
+			RunTracker.canStartRunHere(inRunStartArea, inPrepRoom),
+			runTracker.shouldShowOverlay(client),
+			runTracker.isRunActive(),
+			runTracker.isRunComplete(),
+			runTracker.isAwaitingNextRun()
+		);
+		previousRegionId = rawRegionId != -1 ? rawRegionId : regionId;
+		previousInRunStartArea = inRunStartArea;
+		previousInPrepRoom = inPrepRoom;
 	}
 }

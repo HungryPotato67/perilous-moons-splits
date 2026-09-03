@@ -12,24 +12,20 @@ import org.junit.Test;
 public class RoutePermutationsTest
 {
 	@Test
-	public void containsAllSixBossOrders()
+	public void allBossOrdersAreUniqueAndComplete()
 	{
-		List<List<MoonsBoss>> permutations = RoutePermutations.all();
+		List<List<MoonsBoss>> permutations = MoonsBoss.allRoutes();
 		assertEquals(6, permutations.size());
 
 		Set<String> routes = new HashSet<>();
 		for (List<MoonsBoss> route : permutations)
 		{
 			assertEquals(3, route.size());
-			routes.add(RoutePermutations.formatRoute(route));
+			routes.add(MoonsBoss.formatRoute(route));
+			assertEquals(3, new HashSet<>(route).size());
 		}
 
-		assertTrue(routes.contains("Blood -> Eclipse -> Blue"));
-		assertTrue(routes.contains("Blood -> Blue -> Eclipse"));
-		assertTrue(routes.contains("Eclipse -> Blood -> Blue"));
-		assertTrue(routes.contains("Eclipse -> Blue -> Blood"));
-		assertTrue(routes.contains("Blue -> Blood -> Eclipse"));
-		assertTrue(routes.contains("Blue -> Eclipse -> Blood"));
+		assertEquals(6, routes.size());
 	}
 
 	@Test
@@ -37,7 +33,7 @@ public class RoutePermutationsTest
 	{
 		assertEquals(
 			"Blood -> Eclipse -> Blue",
-			RoutePermutations.formatRoute(Arrays.asList(MoonsBoss.BLOOD, MoonsBoss.ECLIPSE, MoonsBoss.BLUE))
+			MoonsBoss.formatRoute(Arrays.asList(MoonsBoss.BLOOD, MoonsBoss.ECLIPSE, MoonsBoss.BLUE))
 		);
 	}
 }

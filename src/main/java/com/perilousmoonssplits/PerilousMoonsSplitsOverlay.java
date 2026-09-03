@@ -17,8 +17,6 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 	private final PerilousMoonsSplitsConfig config;
 	private final RunTracker runTracker;
 	private final PersonalBestStore personalBestStore;
-	private final DungeonOverlayVisibility dungeonOverlayVisibility;
-	private final RoutePbToggle routePbToggle;
 
 	@Inject
 	private PerilousMoonsSplitsOverlay(
@@ -26,23 +24,20 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 		PerilousMoonsSplitsConfig config,
 		RunTracker runTracker,
 		PersonalBestStore personalBestStore,
-		DungeonOverlayVisibility dungeonOverlayVisibility,
-		RoutePbToggle routePbToggle)
+		PerilousMoonsSplitsPlugin plugin)
 	{
 		this.client = client;
 		this.config = config;
 		this.runTracker = runTracker;
 		this.personalBestStore = personalBestStore;
-		this.dungeonOverlayVisibility = dungeonOverlayVisibility;
-		this.routePbToggle = routePbToggle;
 		setPosition(OverlayPosition.TOP_LEFT);
-		addMenuEntry(MenuAction.RUNELITE_OVERLAY, "Toggle", "Route PBs", e -> routePbToggle.toggle());
+		addMenuEntry(MenuAction.RUNELITE_OVERLAY, "Toggle", "Route PBs", e -> plugin.toggleRoutePersonalBests());
 	}
 
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (!config.showOverlay() || !dungeonOverlayVisibility.shouldShowOverlay(client))
+		if (!config.showOverlay() || !runTracker.shouldShowOverlay(client))
 		{
 			return null;
 		}
@@ -51,12 +46,10 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 		panelComponent.setPreferredSize(new Dimension(config.overlayWidth(), 0));
 
 		String orderSummary = runTracker.getOrderSummary();
-		String title = orderSummary.isEmpty()
-			? "Perilous Moons Splits"
-			: "Perilous Moons Splits [" + orderSummary + "]";
-
 		panelComponent.getChildren().add(TitleComponent.builder()
-			.text(title)
+			.text(orderSummary.isEmpty()
+				? "Perilous Moons Splits"
+				: "Perilous Moons Splits [" + orderSummary + "]")
 			.color(Color.ORANGE)
 			.build());
 
@@ -68,26 +61,18 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 		{
 			SplitData split = runTracker.getSplits()[i];
 			boolean isActive = i == activeSplitIndex;
-			hasStartedSplit = hasStartedSplit || split.isActive() || split.isComplete();
+			hasStartedSplit |= split.isActive() || split.isComplete();
 
-			String timeText;
-			if (split.isComplete())
-			{
-				timeText = SplitFormatter.formatDuration(split.getElapsedMs(split.getEndTimeMs()));
-			}
-			else if (split.isActive())
-			{
-				timeText = SplitFormatter.formatDuration(split.getElapsedMs(nowMs));
-			}
-			else
-			{
-				timeText = "--:--";
-			}
+			String timeText = split.isComplete()
+				? SplitData.formatDuration(split.getElapsedMs(split.getEndTimeMs()))
+				: split.isActive()
+					? SplitData.formatDuration(split.getElapsedMs(nowMs))
+					: "--:--";
 
 			Long personalBest = runTracker.getPersonalBestForSplit(i, personalBestStore);
-			String pbText = personalBest == null ? "--:--" : SplitFormatter.formatDuration(personalBest);
-
+			String pbText = personalBest == null ? "--:--" : SplitData.formatDuration(personalBest);
 			Color lineColor = isActive ? Color.GREEN : Color.WHITE;
+
 			panelComponent.getChildren().add(LineComponent.builder()
 				.left(runTracker.getSplitLabel(i))
 				.right(timeText + "  PB " + pbText)
@@ -110,11 +95,10 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 		{
 			long totalMs = runTracker.getTotalElapsedMs(nowMs);
 			Long totalPb = runTracker.getTotalPersonalBest(personalBestStore);
-			String totalPbText = totalPb == null ? "--:--" : SplitFormatter.formatDuration(totalPb);
-
+			String totalPbText = totalPb == null ? "--:--" : SplitData.formatDuration(totalPb);
 			panelComponent.getChildren().add(LineComponent.builder()
 				.left("Total")
-				.right(SplitFormatter.formatDuration(totalMs) + "  PB " + totalPbText)
+				.right(SplitData.formatDuration(totalMs) + "  PB " + totalPbText)
 				.leftColor(Color.YELLOW)
 				.rightColor(Color.YELLOW)
 				.build());
