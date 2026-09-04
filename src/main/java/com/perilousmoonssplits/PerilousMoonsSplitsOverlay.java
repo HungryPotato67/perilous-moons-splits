@@ -53,7 +53,7 @@ class PerilousMoonsSplitsOverlay extends OverlayPanel
 			.color(Color.ORANGE)
 			.build());
 
-		long nowMs = System.currentTimeMillis();
+		long nowMs = runTracker.getTimerNowMs();
 		int activeSplitIndex = runTracker.getActiveSplitIndex();
 		boolean hasStartedSplit = false;
 

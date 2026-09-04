@@ -79,11 +79,11 @@ public interface PerilousMoonsSplitsConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "resetKeybind",
-		name = "Reset run",
-		description = "Reset the current run tracking"
+		keyName = "restartCurrentSplitKeybind",
+		name = "Restart current split",
+		description = "Restart only the currently running split timer (food/potion counts for that split are also cleared)"
 	)
-	default Keybind resetKeybind()
+	default Keybind restartCurrentSplitKeybind()
 	{
 		return Keybind.NOT_SET;
 	}

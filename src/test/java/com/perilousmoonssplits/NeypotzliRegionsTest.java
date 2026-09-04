@@ -8,9 +8,19 @@ import org.junit.Test;
 public class NeypotzliRegionsTest
 {
 	@Test
-	public void entranceRoomIsNotRunStartArea()
+	public void camTorumCityIsNotNeypotzli()
 	{
-		assertTrue(NeypotzliRegions.isNeypotzliRegion(5781));
+		// Cam Torum ~ (1440, 9568) => region 5781; leaving the antechamber returns here.
+		assertFalse(NeypotzliRegions.isNeypotzliRegion(NeypotzliRegions.CAM_TORUM_REGION_ID));
+		assertFalse(NeypotzliRegions.isPrepRoomRegion(NeypotzliRegions.CAM_TORUM_REGION_ID, false));
+		assertFalse(NeypotzliRegions.isRunStartRegion(NeypotzliRegions.CAM_TORUM_REGION_ID));
+	}
+
+	@Test
+	public void entranceStripOutsideDungeonIsNotNeypotzli()
+	{
+		assertFalse(NeypotzliRegions.isNeypotzliRegion(5780));
+		assertFalse(NeypotzliRegions.isNeypotzliRegion(5781));
 		assertFalse(NeypotzliRegions.isAntechamberRegion(5781));
 		assertFalse(NeypotzliRegions.isBossChamberRegion(5781));
 		assertFalse(NeypotzliRegions.isRunStartRegion(5781));
@@ -24,16 +34,41 @@ public class NeypotzliRegionsTest
 	}
 
 	@Test
-	public void preparationCavernsAreNotRunStartAreas()
+	public void shrineIsNotPrepCampsite()
+	{
+		assertTrue(NeypotzliRegions.isNeypotzliRegion(6036));
+		assertTrue(NeypotzliRegions.isShrineRegion(6036));
+		assertFalse(NeypotzliRegions.isPrepCampsiteRegion(6036));
+		assertFalse(NeypotzliRegions.isPrepCampsiteRegion(6041));
+	}
+
+	@Test
+	public void streamboundAndEarthboundArePrepCampsites()
+	{
+		assertTrue(NeypotzliRegions.isPrepCampsiteRegion(5782));
+		assertTrue(NeypotzliRegions.isPrepCampsiteRegion(6039));
+		assertTrue(NeypotzliRegions.isPrepCampsiteRegion(NeypotzliRegions.ANCIENT_PRISON_REGION_ID));
+		assertFalse(NeypotzliRegions.isPrepCampsiteRegion(NeypotzliRegions.ANTECHAMBER_REGION_ID));
+		assertFalse(NeypotzliRegions.isPrepCampsiteRegion(6038));
+	}
+
+	@Test
+	public void earthboundCavernIsNeypotzli()
 	{
 		assertTrue(NeypotzliRegions.isNeypotzliRegion(5782));
 		assertTrue(NeypotzliRegions.isNeypotzliRegion(5783));
+		assertTrue(NeypotzliRegions.isNeypotzliRegion(5784));
+		assertTrue(NeypotzliRegions.isPrepRoomRegion(5782, false));
+		assertFalse(NeypotzliRegions.isNeypotzliRegion(NeypotzliRegions.CAM_TORUM_REGION_ID));
 		assertFalse(NeypotzliRegions.isBossChamberRegion(5782));
-		assertFalse(NeypotzliRegions.isBossChamberRegion(5783));
 		assertFalse(NeypotzliRegions.isRunStartRegion(5782));
 		assertFalse(NeypotzliRegions.isRunStartRegion(5783));
-		assertTrue(NeypotzliRegions.isPrepRoomRegion(5782, false));
-		assertTrue(NeypotzliRegions.isPrepRoomRegion(5783, false));
+	}
+
+	@Test
+	public void camTorumAloneIsNotPrepRoom()
+	{
+		assertFalse(NeypotzliRegions.isPrepRoomRegion(NeypotzliRegions.CAM_TORUM_REGION_ID, false));
 	}
 
 	@Test

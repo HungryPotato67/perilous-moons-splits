@@ -69,6 +69,15 @@ class SplitData
 		potionsUsed = 0;
 	}
 
+	/** Move an active split's start forward so logout time is excluded from elapsed. */
+	void shiftStart(long deltaMs)
+	{
+		if (startTimeMs >= 0 && endTimeMs < 0 && deltaMs > 0)
+		{
+			startTimeMs += deltaMs;
+		}
+	}
+
 	static String formatDuration(long millis)
 	{
 		if (millis < 0)

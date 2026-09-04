@@ -25,6 +25,8 @@ public class DungeonOverlayVisibilityTest
 	public void earthboundCavernIsNeypotzli()
 	{
 		assertTrue(NeypotzliRegions.isNeypotzliRegion(5782));
+		assertTrue(NeypotzliRegions.isNeypotzliRegion(5783));
+		assertTrue(NeypotzliRegions.isNeypotzliRegion(5784));
 		assertTrue(NeypotzliRegions.isPrepRoomRegion(5782, false));
 	}
 
@@ -45,6 +47,22 @@ public class DungeonOverlayVisibilityTest
 		assertTrue(tracker.shouldShowOverlayForRegion(NeypotzliRegions.ANTECHAMBER_REGION_ID));
 		assertTrue(tracker.shouldShowOverlayForRegion(NeypotzliRegions.ANCIENT_PRISON_REGION_ID));
 		assertTrue(tracker.shouldShowOverlayForRegion(5782));
+	}
+
+	@Test
+	public void overlayRequiresDungeonRegionNotCombatFallback()
+	{
+		RunTracker tracker = new RunTracker();
+		assertFalse(tracker.shouldShowOverlayForRegion(3200));
+		assertTrue(tracker.shouldShowOverlayForRegion(NeypotzliRegions.ANTECHAMBER_REGION_ID));
+	}
+
+	@Test
+	public void overlayHiddenInCamTorumRegion()
+	{
+		RunTracker tracker = new RunTracker();
+		assertFalse(tracker.shouldShowOverlayForRegion(NeypotzliRegions.CAM_TORUM_REGION_ID));
+		assertTrue(tracker.shouldShowOverlayForRegion(NeypotzliRegions.ANTECHAMBER_REGION_ID));
 	}
 
 	@Test

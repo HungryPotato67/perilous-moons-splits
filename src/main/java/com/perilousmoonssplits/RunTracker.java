@@ -43,6 +43,8 @@ public class RunTracker
 	private WorldPoint lootLocation;
 	private int visibleBossCount;
 	private boolean overlaySuppressedUntilReenter;
+	/** When set, active split clocks are frozen at this wall-clock time (logout / hop). */
+	private long timerPausedAtMs = -1;
 
 	public boolean isRunActive()
 	{
@@ -109,7 +111,7 @@ public class RunTracker
 		boolean canStartHere = canStartRunHere(inRunStartArea, inPrepRoom);
 		int regionId = NeypotzliRegions.getPlayerRegion(client);
 
-		if (awaitingNextRun && shouldStartAfterChestLoot(client, inNeypotzli, inRunStartArea, inPrepRoom, regionId))
+		if (awaitingNextRun && shouldStartAfterChestLoot(client, inNeypotzli, regionId))
 		{
 			startNextRun(client, System.currentTimeMillis());
 		}
@@ -139,6 +141,10 @@ public class RunTracker
 		wasBossInCombat = false;
 		visibleBossCount = 0;
 
+		// Always resume if paused. Login/hop often goes LOGGING_IN/HOPPING -> LOADING ->
+		// LOGGED_IN, so previousGameState may be LOADING and fromLoginOrHop is false.
+		resumeTimers(System.currentTimeMillis());
+
 		if (fromLoginOrHop)
 		{
 			overlaySuppressedUntilReenter = false;
@@ -158,6 +164,54 @@ public class RunTracker
 		}
 	}
 
+	void onLoggedOut()
+	{
+		pauseTimers(System.currentTimeMillis());
+	}
+
+	/**
+	 * Wall-clock "now" for displaying / advancing active splits. Frozen while logged out.
+	 */
+	long getTimerNowMs()
+	{
+		return timerPausedAtMs >= 0 ? timerPausedAtMs : System.currentTimeMillis();
+	}
+
+	boolean isTimerPaused()
+	{
+		return timerPausedAtMs >= 0;
+	}
+
+	void pauseTimers(long nowMs)
+	{
+		if (timerPausedAtMs >= 0 || !runActive)
+		{
+			return;
+		}
+		timerPausedAtMs = nowMs;
+	}
+
+	void resumeTimers(long nowMs)
+	{
+		if (timerPausedAtMs < 0)
+		{
+			return;
+		}
+
+		long pausedForMs = Math.max(0, nowMs - timerPausedAtMs);
+		if (pausedForMs > 0)
+		{
+			for (SplitData split : splits)
+			{
+				if (split.isActive())
+				{
+					split.shiftStart(pausedForMs);
+				}
+			}
+		}
+		timerPausedAtMs = -1;
+	}
+
 	boolean shouldShowOverlay(Client client)
 	{
 		if (overlaySuppressedUntilReenter)
@@ -168,7 +222,8 @@ public class RunTracker
 		{
 			return false;
 		}
-		return NeypotzliRegions.isInNeypotzli(client) || isBossPresent() || isBossInCombat(client);
+		// Region only — boss combat varbits / NPC counts can stick after leaving the dungeon.
+		return NeypotzliRegions.isInNeypotzli(client);
 	}
 
 	boolean shouldShowOverlayForRegion(int regionId)
@@ -183,9 +238,10 @@ public class RunTracker
 
 	void onOverlayRegionChanged(Client client)
 	{
-		if (!NeypotzliRegions.isInNeypotzli(client) && !isBossPresent() && !isBossInCombat(client))
+		if (!NeypotzliRegions.isInNeypotzli(client))
 		{
 			overlaySuppressedUntilReenter = false;
+			visibleBossCount = 0;
 		}
 	}
 
@@ -230,8 +286,6 @@ public class RunTracker
 		if (awaitingNextRun && shouldStartAfterChestLoot(
 			client,
 			NeypotzliRegions.isInNeypotzli(client),
-			inRunStartArea,
-			inPrepRoom,
 			regionId))
 		{
 			startNextRun(client, System.currentTimeMillis());
@@ -376,11 +430,35 @@ public class RunTracker
 		lootLocation = null;
 	}
 
+	/**
+	 * Restarts only the currently active split timer and clears its food/potion counts.
+	 * Completed splits and kill order are left unchanged.
+	 *
+	 * @return true if an active split was restarted
+	 */
+	public boolean restartCurrentSplit(long nowMs)
+	{
+		int activeIndex = getActiveSplitIndex();
+		if (activeIndex < 0 || !runActive)
+		{
+			return false;
+		}
+
+		if (timerPausedAtMs >= 0)
+		{
+			timerPausedAtMs = nowMs;
+		}
+
+		splits[activeIndex].start(nowMs);
+		return true;
+	}
+
 	void beginRun(long nowMs)
 	{
 		awaitingNextRun = false;
 		lootRegionId = -1;
 		lootLocation = null;
+		timerPausedAtMs = -1;
 		runActive = true;
 		runComplete = false;
 		wasBossInCombat = false;
@@ -546,8 +624,6 @@ public class RunTracker
 	private boolean shouldStartAfterChestLoot(
 		Client client,
 		boolean inNeypotzli,
-		boolean inRunStartArea,
-		boolean inPrepRoom,
 		int regionId)
 	{
 		if (!inNeypotzli)
@@ -555,22 +631,43 @@ public class RunTracker
 			return false;
 		}
 
-		if (regionId != -1 && lootRegionId != -1 && regionId != lootRegionId)
+		boolean inPrepCampsite = NeypotzliRegions.isInPrepCampsite(client);
+		boolean leftChestRegion = regionId != -1 && lootRegionId != -1 && regionId != lootRegionId;
+
+		return shouldStartNextRunAfterChest(
+			inNeypotzli,
+			inPrepCampsite,
+			leftChestRegion,
+			hasLeftChestArea(client)
+		);
+	}
+
+	/**
+	 * After looting, only start the next run once the player is in a prep campsite
+	 * cavern (Ancient Prison / Earthbound / Streambound).
+	 * <p>
+	 * Region 6037 includes the Lunar Chest / shrine area, so antechamber / "run start"
+	 * and distance-from-chest alone must not start the next run while still in that room.
+	 */
+	static boolean shouldStartNextRunAfterChest(
+		boolean inNeypotzli,
+		boolean inPrepCampsite,
+		boolean leftChestRegion,
+		boolean leftChestAreaByDistance)
+	{
+		if (!inNeypotzli || !inPrepCampsite)
+		{
+			return false;
+		}
+
+		// Prefer a real transition into a campsite region away from the chest.
+		if (leftChestRegion)
 		{
 			return true;
 		}
 
-		if (hasLeftChestArea(client))
-		{
-			return true;
-		}
-
-		if (!wasInPrepRoom && inPrepRoom)
-		{
-			return true;
-		}
-
-		return !wasInRunStartArea && inRunStartArea;
+		// Same-region fallback only if the campsite somehow shares the chest region.
+		return leftChestAreaByDistance;
 	}
 
 	private boolean hasLeftChestArea(Client client)
@@ -639,6 +736,7 @@ public class RunTracker
 		runComplete = false;
 		wasBossInCombat = false;
 		awaitingNextRun = false;
+		timerPausedAtMs = -1;
 		lootRegionId = -1;
 		lootLocation = null;
 		killOrder.clear();

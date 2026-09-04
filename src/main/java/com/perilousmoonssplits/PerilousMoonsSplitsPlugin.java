@@ -79,10 +79,15 @@ public class PerilousMoonsSplitsPlugin extends Plugin implements KeyListener
 	@Override
 	public void keyPressed(KeyEvent event)
 	{
-		if (config.resetKeybind().matches(event))
+		if (config.restartCurrentSplitKeybind().matches(event))
 		{
-			runTracker.manualReset();
-			chat("Perilous Moons Splits run reset.", Color.ORANGE);
+			if (runTracker.restartCurrentSplit(System.currentTimeMillis()))
+			{
+				chat(
+					"Perilous Moons Splits: restarted " + runTracker.getSplitLabel(runTracker.getActiveSplitIndex()) + ".",
+					Color.ORANGE
+				);
+			}
 		}
 		else if (config.routePbKeybind().matches(event))
 		{
@@ -125,7 +130,14 @@ public class PerilousMoonsSplitsPlugin extends Plugin implements KeyListener
 	public void onGameStateChanged(GameStateChanged event)
 	{
 		GameState gameState = event.getGameState();
-		if (gameState == GameState.LOGGED_IN)
+		if (gameState == GameState.LOGIN_SCREEN
+			|| gameState == GameState.LOGGING_IN
+			|| gameState == GameState.HOPPING
+			|| gameState == GameState.CONNECTION_LOST)
+		{
+			runTracker.onLoggedOut();
+		}
+		else if (gameState == GameState.LOGGED_IN)
 		{
 			boolean fromLoginOrHop = previousGameState == GameState.LOGIN_SCREEN
 				|| previousGameState == GameState.LOGGING_IN
@@ -155,7 +167,8 @@ public class PerilousMoonsSplitsPlugin extends Plugin implements KeyListener
 
 		runTracker.onOverlayRegionChanged(client);
 		runTracker.onRegionChanged(client);
-		handleCompletedPrepSplit(runTracker.syncBossCombatState(client, System.currentTimeMillis()), "tick");
+		long nowMs = runTracker.getTimerNowMs();
+		handleCompletedPrepSplit(runTracker.syncBossCombatState(client, nowMs), "tick");
 
 		int deadBossCount = RunTracker.getDeadBossCount(client);
 		if (previousDeadBossCount < 0)
